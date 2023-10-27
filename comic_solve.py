@@ -224,7 +224,7 @@ def save_top_level_folder_list(top_level_folder_list: list[TopLevelFolder], root
                         with zipfile.ZipFile(new_comic_path, "a", zipfile.ZIP_STORED) as zipf:
                             for root, dirs, files in os.walk(old_comic_path):
                                 for file in files:
-                                    zipf.write(os.path.join(root, file), arcname=os.path.join(comic.new_name, file))
+                                    zipf.write(os.path.join(root, file), arcname=os.path.join(comic.new_name, os.path.relpath(root, old_comic_path), file))
                                     pbar.update(1)
                     else:
                         pbar.update(comic.pages)
