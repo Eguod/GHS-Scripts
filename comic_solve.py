@@ -5,6 +5,17 @@ import shutil
 import zipfile
 from natsort import ns, natsorted
 from tqdm import tqdm
+
+# TODO [2020] 異世界ねぇちゃんは、イク時しか魔法を使えない [官方中文] (1-3话全)
+# -> (1-3话全) [ゐちぼっち (一宮夕羽)] 異世界ねぇちゃんは、イク時しか魔法を使えない
+#  (1-3话全) is useless, should be removed.
+# Should be [ゐちぼっち (一宮夕羽)] 異世界ねぇちゃんは、イク時しか魔法を使えない 1-3
+
+# TODO [2023.06] 巨乳水着グラビアアイドル (30代) の末期 -> (30代) [いちごクレープ大盛組 (横十輔)] 巨乳水着グラビアアイドル
+
+# Set of the common suffixes of image files:
+image_suf_set = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp', '.tiff', '.psd', '.raw', '.heif', '.indd', '.svg'}
+
 '''
 The file structure should be like:
 
@@ -133,8 +144,11 @@ class TopLevelFolder:
     is_club: bool
     sub_folder_list: list[SecondLevelFolder]
 
+# TODO: "进行中" means the comic translation is not finished yet. Then we should prefer the japanese version. 
+# Only one sample is found till now, so ignore it for now.
+
 # The selection rule is:
-# 1. If the comic has chinese version, then select the chinese version.
+# 1. If the comic has chinese version, then select the chinese version
 # 2. If the comic has multiple chinese versions, then select the one with 無修正 in the name.
 # 3. If the comic has multiple chinese versions with 無修正 in the name, select the one with the most pages.
 # 4. If all chinese versions have the same number of pages, then select the first one.
@@ -245,11 +259,10 @@ def get_new_comic_name(comic: ComicFolder, author_full: str):
     for note in comic.note:
         new_comic_name+=" ["+note+"]"
     
-    new_comic_name.strip()
-    return new_comic_name
+    return new_comic_name.strip()
 
 def get_top_level_folder_list(files_list: list) -> tuple[list[TopLevelFolder], list[str]]:
-    pattern = r"\d{4}-\[(.+)\]"
+    pattern = r"^[C\d]{1}\d{3}-\[(.+)\]"
     skip_list = []
     res_list = []
     if len(files_list)==0:
@@ -262,6 +275,9 @@ def get_top_level_folder_list(files_list: list) -> tuple[list[TopLevelFolder], l
             filename_full = item
             idx = item[:4]
             author_full = item[5:]
+
+            # Special case: [治屋武しでん] part1
+            author_full = author_full.split(" part")[0]
 
             # The author_full could be: [author], [club (author)], [club (author1、author2、...)]
 
@@ -354,10 +370,83 @@ def fill_in_top_level_folder_list(top_level_folder_list):
 
             second_file_path = os.path.join(root_path, top_level_folder.filename_full, second_file)
 
-            if "画集" in second_file or "动画" in second_file:
+            if "动画" in second_file or "音声" in second_file:
                 continue
 
-            if os.path.isdir(second_file_path):
+            # TODO Some time in "画集", the title is still like other comic. Like [2018.02] モグダン イラストワークス + クリアファイル裏 [無修正]
+            elif "画集" in second_file:
+                # Collect the single pictures in the folder
+                item_list = natsorted(os.listdir(second_file_path))
+                single_images_list = []
+                res_comic_list = []
+                for item in item_list:
+                    # If item is not a folder
+                    if not os.path.isdir(os.path.join(second_file_path, item)) and item.lower().split('.')[-1] in image_suf_set:
+                        single_images_list.append(comic)
+                    elif os.path.isdir(os.path.join(second_file_path, item)):
+                        # PIXIV FANBOX 作品集 (kemono 截止2023.07.09 标注发布时间&作品名称依次排序)
+                        # PIXIV 全公开投稿 作品集 (自整理 348P 截止2023.08.06 按发布时间先后排序)
+                        # ex-hentai 杂图汇总
+                        # FANTIA 作品集 (kemono 截止2023.03.24 标注发布时间&作品名称依次排序)
+                        comic_folder_path = os.path.join(second_file_path, item)
+                        if not os.path.isdir(comic_folder_path):
+                            continue
+
+                        if item[0] == "#":
+                            skip_comic_list.append(comic_folder_path)
+                            continue
+                        
+                        event = ""
+                        item_name_splited = split_comic_name(item)
+                        for item_name in item_name_splited:
+                            if item_name["type"] == "()" and "截止" in item_name["content"]:
+                                event = item_name["content"].split("截止")[-1].split(" ")[0].strip()
+                            elif item_name["type"] == "c":
+                                comicname = top_level_folder.author_name_list[0] + ' ' + item_name["content"] if top_level_folder.is_club else top_level_folder.author_full + ' ' + item_name["content"]
+
+                        comic = ComicFolder(
+                            filename=item,
+                            comicname=comicname,
+                            language="",
+                            translator="",
+                            time="",
+                            event=event,
+                            series="",
+                            note=[],
+                            pages = 0,
+                            new_name=""
+                        )
+                        comic.new_name = get_new_comic_name(comic, top_level_folder.author_full)
+
+                        comic.pages = len((os.listdir(comic_folder_path)))
+                        res_comic_list.append(comic)
+                        
+                if single_images_list:
+                    # Create a new folder for the single images
+                    single_images_folder_path = os.path.join(second_file_path, "其他杂图")
+                    if not os.path.exists(single_images_folder_path):
+                        os.mkdir(single_images_folder_path)
+                    for single_image in single_images_list:
+                        shutil.move(os.path.join(second_file_path, single_image), single_images_folder_path)
+                    comic = ComicFolder(
+                        filename="其他杂图",
+                        comicname= top_level_folder.author_name_list[0] + ' ' + "其他杂图" if top_level_folder.is_club else top_level_folder.author_full + ' ' + "其他杂图",
+                        language="",
+                        translator="",
+                        time="",
+                        event="",
+                        series="",
+                        note=[],
+                        pages = len(single_images_list),
+                        new_name=""
+                    )
+                    comic.new_name = get_new_comic_name(comic, top_level_folder.author_full)
+                    comic.pages = len((os.listdir(single_images_folder_path)))
+                    res_comic_list.append(comic)
+
+                top_level_folder.sub_folder_list.append(SecondLevelFolder(foldername=second_file, content_list=res_comic_list))
+
+            elif os.path.isdir(second_file_path):
 
                 comic_list=natsorted(os.listdir(second_file_path))
 
@@ -416,7 +505,6 @@ def fill_in_top_level_folder_list(top_level_folder_list):
                             comic.translator = comic_name_splited[-1]["content"]
                     else:
                         pass
-
 
                     if comic_name_splited[0]["type"] == "[]":
                         if is_date(comic_name_splited[0]["content"]):
