@@ -360,6 +360,13 @@ def is_event(string):
             return True
     return False
 
+def get_file_number(root_path):
+    file_number = 0
+    for root, dirs, files in os.walk(root_path):
+        for file in files:
+            file_number += 1
+    return file_number
+
 def fill_in_top_level_folder_list(top_level_folder_list):
     skip_comic_list = []
     for top_level_folder in top_level_folder_list:
@@ -418,7 +425,7 @@ def fill_in_top_level_folder_list(top_level_folder_list):
                         )
                         comic.new_name = get_new_comic_name(comic, top_level_folder.author_full)
 
-                        comic.pages = len((os.listdir(comic_folder_path)))
+                        comic.pages = get_file_number(comic_folder_path)
                         res_comic_list.append(comic)
                         
                 if single_images_list:
@@ -441,7 +448,7 @@ def fill_in_top_level_folder_list(top_level_folder_list):
                         new_name=""
                     )
                     comic.new_name = get_new_comic_name(comic, top_level_folder.author_full)
-                    comic.pages = len((os.listdir(single_images_folder_path)))
+                    comic.pages = get_file_number(single_images_folder_path)
                     res_comic_list.append(comic)
 
                 top_level_folder.sub_folder_list.append(SecondLevelFolder(foldername=second_file, content_list=res_comic_list))
@@ -534,7 +541,7 @@ def fill_in_top_level_folder_list(top_level_folder_list):
                     
                     comic.comicname = get_first_c(comic_name_splited)
 
-                    comic.pages = len((os.listdir(comic_folder_path)))
+                    comic.pages = get_file_number(comic_folder_path)
 
                     comic.new_name = get_new_comic_name(comic, top_level_folder.author_full)
 
