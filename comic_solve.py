@@ -16,6 +16,9 @@ from tqdm import tqdm
 # Set of the common suffixes of image files:
 image_suf_set = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp', '.tiff', '.psd', '.raw', '.heif', '.indd', '.svg'}
 
+# tmperary folder name
+TMP_FOLDER_NAME = "comic_solve_tmp"
+
 '''
 The file structure should be like:
 
@@ -218,6 +221,8 @@ def get_pages_number(top_level_folder_list: list[TopLevelFolder]):
                 page_number += comic.pages
     return page_number
 
+def remove_extension(filename):
+    return filename[:filename.rfind('.')]
 
 def save_top_level_folder_list(top_level_folder_list: list[TopLevelFolder], root_path:str, save_path: str):
     total_pages_number = get_pages_number(top_level_folder_list)
@@ -238,10 +243,26 @@ def save_top_level_folder_list(top_level_folder_list: list[TopLevelFolder], root
                         with zipfile.ZipFile(new_comic_path, "a", zipfile.ZIP_STORED) as zipf:
                             for root, dirs, files in os.walk(old_comic_path):
                                 for file in files:
-                                    zipf.write(os.path.join(root, file), arcname=os.path.join(comic.new_name, os.path.relpath(root, old_comic_path), file))
+                                    # If the file is a compressed file (only zip), then recursively unzip it.
+                                    if file.lower().split('.')[-1] == 'zip':
+                                        try:
+                                            filename = remove_extension(file)
+                                            tmp_path = os.path.join(root_path, TMP_FOLDER_NAME, filename)
+                                            # Unpack the compressed file to a temp folder outside the root_path
+                                            shutil.unpack_archive(os.path.join(root, file), tmp_path, 'zip')
+                                            for root2, dirs2, files2 in os.walk(tmp_path):
+                                                for file2 in files2:
+                                                    zipf.write(os.path.join(root2, file2), arcname=os.path.join(comic.new_name, os.path.relpath(root2, tmp_path), file2))
+                                            shutil.rmtree(tmp_path)
+                                        except:
+                                            print("Failed to unzip {}".format(os.path.join(root, file)))
+                                    else:
+                                        zipf.write(os.path.join(root, file), arcname=os.path.join(comic.new_name, os.path.relpath(root, old_comic_path), file))
                                     pbar.update(1)
                     else:
                         pbar.update(comic.pages)
+    if os.path.exists(os.path.join(root_path, TMP_FOLDER_NAME)):
+        shutil.rmtree(os.path.join(root_path, TMP_FOLDER_NAME))
     print("Done! All files are saved to {}".format(save_path))
     input("Press Enter to exit...")
 
