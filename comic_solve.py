@@ -13,6 +13,8 @@ from tqdm import tqdm
 
 # TODO [2023.06] 巨乳水着グラビアアイドル (30代) の末期 -> (30代) [いちごクレープ大盛組 (横十輔)] 巨乳水着グラビアアイドル
 
+# TODO The unziped filenames should be decoded using shift_jis.
+
 # Set of the common suffixes of image files:
 image_suf_set = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp', '.tiff', '.psd', '.raw', '.heif', '.indd', '.svg'}
 
@@ -247,12 +249,12 @@ def save_top_level_folder_list(top_level_folder_list: list[TopLevelFolder], root
                                     if file.lower().split('.')[-1] == 'zip':
                                         try:
                                             filename = remove_extension(file)
-                                            tmp_path = os.path.join(root_path, TMP_FOLDER_NAME, filename)
+                                            tmp_path = os.path.join(root_path, TMP_FOLDER_NAME, os.path.relpath(root, old_comic_path), filename)
                                             # Unpack the compressed file to a temp folder outside the root_path
                                             shutil.unpack_archive(os.path.join(root, file), tmp_path, 'zip')
                                             for root2, dirs2, files2 in os.walk(tmp_path):
                                                 for file2 in files2:
-                                                    zipf.write(os.path.join(root2, file2), arcname=os.path.join(comic.new_name, os.path.relpath(root2, tmp_path), file2))
+                                                    zipf.write(os.path.join(root2, file2), arcname=os.path.join(comic.new_name, os.path.relpath(root, old_comic_path), os.path.relpath(root2, tmp_path), file2))
                                             shutil.rmtree(tmp_path)
                                         except:
                                             print("Failed to unzip {}".format(os.path.join(root, file)))
@@ -574,9 +576,11 @@ def fill_in_top_level_folder_list(top_level_folder_list):
     return skip_comic_list
 
 if __name__ == "__main__":
+    MULTI_THREAD = False
 
     root_path = input("Please input the root path: ")
     save_path = input("Please input the save path: ")
+    thread_number = 4
 
     all_top_files_list = natsorted(os.listdir(root_path))
 
@@ -586,4 +590,22 @@ if __name__ == "__main__":
   
     clean_top_level_folder_list(top_level_folder_list)
 
-    save_top_level_folder_list(top_level_folder_list, root_path, save_path)
+    if MULTI_THREAD:
+        # Divide the top_level_folder_list into several parts for each thread
+        top_level_folder_list_list = []
+        for i in range(thread_number):
+            top_level_folder_list_list.append([])
+        for i in range(len(top_level_folder_list)):
+            top_level_folder_list_list[i%thread_number].append(top_level_folder_list[i])
+        
+        # Use multi-thread to save the files
+        import threading
+        threads = []
+        for i in range(thread_number):
+            threads.append(threading.Thread(target=save_top_level_folder_list, args=(top_level_folder_list_list[i], root_path, save_path)))
+        for i in range(thread_number):
+            threads[i].start()
+        for i in range(thread_number):
+            threads[i].join()
+    else:
+        save_top_level_folder_list(top_level_folder_list, root_path, save_path)
