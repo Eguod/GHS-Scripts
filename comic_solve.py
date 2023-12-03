@@ -6,6 +6,8 @@ import zipfile
 from natsort import ns, natsorted
 from tqdm import tqdm
 
+VERSION_NUMBER = "20231204"
+
 # TODO [2020] 異世界ねぇちゃんは、イク時しか魔法を使えない [官方中文] (1-3话全)
 # -> (1-3话全) [ゐちぼっち (一宮夕羽)] 異世界ねぇちゃんは、イク時しか魔法を使えない
 #  (1-3话全) is useless, should be removed.
@@ -228,8 +230,7 @@ def remove_extension(filename):
 
 def save_top_level_folder_list(top_level_folder_list: list[TopLevelFolder], root_path:str, save_path: str):
     total_pages_number = get_pages_number(top_level_folder_list)
-    if not os.path.exists(save_path):
-        os.mkdir(save_path)
+
     # process with progress bar
     with tqdm(total=total_pages_number) as pbar:
         for top_level_folder in top_level_folder_list:
@@ -264,10 +265,13 @@ def save_top_level_folder_list(top_level_folder_list: list[TopLevelFolder], root
                                     pbar.update(1)
                     else:
                         pbar.update(comic.pages)
-    if os.path.exists(os.path.join(root_path, TMP_FOLDER_NAME)):
-        shutil.rmtree(os.path.join(root_path, TMP_FOLDER_NAME))
-    print("Done! All files are saved to {}".format(save_path))
-    input("Press Enter to exit...")
+
+
+
+def delete_tmp_folder(tmp_path):
+    print("Deleting tmp folder...")
+    if os.path.exists(tmp_path):
+        shutil.rmtree(tmp_path)
 
 def get_new_comic_name(comic: ComicFolder, author_full: str):
     new_comic_name = ""
@@ -577,11 +581,26 @@ def fill_in_top_level_folder_list(top_level_folder_list):
     return skip_comic_list
 
 if __name__ == "__main__":
-    MULTI_THREAD = True
+
+    print("Comic Solve v{} by Douge".format(VERSION_NUMBER))
+
+    use_multi_thread = input("Threads Number (Default 1)：")
+    if use_multi_thread == '1' or use_multi_thread == '':
+        thread_number = 1
+        MULTI_THREAD = False
+    elif use_multi_thread.isdigit():
+        thread_number = eval(use_multi_thread)
+        MULTI_THREAD = True
+    else:
+        print("Invalid input. Using single thread.")
+        thread_number = 1
+        MULTI_THREAD = False
 
     root_path = input("Please input the root path: ")
     save_path = input("Please input the save path: ")
-    thread_number = 4
+    save_path = os.path.join(save_path, "comic_solve_output")
+    if not os.path.exists(save_path):
+        os.mkdir(save_path)
 
     all_top_files_list = natsorted(os.listdir(root_path))
 
@@ -594,6 +613,9 @@ if __name__ == "__main__":
     if MULTI_THREAD:
         # Divide the top_level_folder_list into several parts for each thread
         top_level_folder_list_list = []
+        if thread_number > len(top_level_folder_list):
+            thread_number = len(top_level_folder_list)
+            print("Threads Number is larger than top level folder number. Using {} threads instead.".format(thread_number))
         for i in range(thread_number):
             top_level_folder_list_list.append([])
         for i in range(len(top_level_folder_list)):
@@ -610,3 +632,7 @@ if __name__ == "__main__":
             threads[i].join()
     else:
         save_top_level_folder_list(top_level_folder_list, root_path, save_path)
+    
+    delete_tmp_folder(os.path.join(root_path, TMP_FOLDER_NAME))
+    print("Done! All files are saved to {}".format(save_path))
+    input("Press Enter to exit...")
