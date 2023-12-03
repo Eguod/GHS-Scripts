@@ -64,12 +64,11 @@
 
 #### 使用方法
 1. 直接双击运行`comic_solve.exe`
-2. Please input the root path: 输入包括单个/多个画师子文件夹的根目录。比如到第二层子文件夹的路径是：`C:\Users\Name\Downloads\save\4332-[NANIMOSHINAI (笹森トモエ)]\1. 同人志`，那么就输入`C:\Users\Name\Downloads\save`。
-3. Please input the save path: 整理后结果的文件夹。可以和上面相同，也可以不同。
+2. Threads Number (Default 1)：输入想要用的线程数，默认为1。多线程可能可以提高运行速度，如果是固态硬盘，可以尝试2~CPU线程数。如果是机械硬盘，推荐1。
+3. Please input the root path: 输入包括单个/多个画师子文件夹的根目录。比如到第二层子文件夹的路径是：`C:\Users\Name\Downloads\save\4332-[NANIMOSHINAI (笹森トモエ)]\1. 同人志`，那么就输入`C:\Users\Name\Downloads\save`。
+4. Please input the save path: 整理后结果的文件夹。可以和上面相同，也可以不同。
 
 #### 效果
 - 导入Lanraragi之后，文件名可以被正确解析
 - ![img](./figures/lanraragi.png)
 
-#### 多线程
-- 默认开启多线程。调整线程数目：`thread_number`（默认为4）。开关多线程：`MULTI_THREAD`。
