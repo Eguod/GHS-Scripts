@@ -257,7 +257,8 @@ def save_top_level_folder_list(top_level_folder_list: list[TopLevelFolder], root
                                                     zipf.write(os.path.join(root2, file2), arcname=os.path.join(comic.new_name, os.path.relpath(root, old_comic_path), os.path.relpath(root2, tmp_path), file2))
                                             shutil.rmtree(tmp_path)
                                         except:
-                                            print("Failed to unzip {}".format(os.path.join(root, file)))
+                                            print("Failed to unzip {}. Treating zip as a whole.".format(os.path.join(root, file)))
+                                            zipf.write(os.path.join(root, file), arcname=os.path.join(comic.new_name, os.path.relpath(root, old_comic_path), file))
                                     else:
                                         zipf.write(os.path.join(root, file), arcname=os.path.join(comic.new_name, os.path.relpath(root, old_comic_path), file))
                                     pbar.update(1)
@@ -576,7 +577,7 @@ def fill_in_top_level_folder_list(top_level_folder_list):
     return skip_comic_list
 
 if __name__ == "__main__":
-    MULTI_THREAD = False
+    MULTI_THREAD = True
 
     root_path = input("Please input the root path: ")
     save_path = input("Please input the save path: ")
