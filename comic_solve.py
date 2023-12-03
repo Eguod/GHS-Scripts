@@ -5,6 +5,22 @@ import shutil
 import zipfile
 from natsort import ns, natsorted
 from tqdm import tqdm
+
+# TODO [2020] 異世界ねぇちゃんは、イク時しか魔法を使えない [官方中文] (1-3话全)
+# -> (1-3话全) [ゐちぼっち (一宮夕羽)] 異世界ねぇちゃんは、イク時しか魔法を使えない
+#  (1-3话全) is useless, should be removed.
+# Should be [ゐちぼっち (一宮夕羽)] 異世界ねぇちゃんは、イク時しか魔法を使えない 1-3
+
+# TODO [2023.06] 巨乳水着グラビアアイドル (30代) の末期 -> (30代) [いちごクレープ大盛組 (横十輔)] 巨乳水着グラビアアイドル
+
+# TODO The unziped filenames should be decoded using shift_jis.
+
+# Set of the common suffixes of image files:
+image_suf_set = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp', '.tiff', '.psd', '.raw', '.heif', '.indd', '.svg'}
+
+# tmperary folder name
+TMP_FOLDER_NAME = "comic_solve_tmp"
+
 '''
 The file structure should be like:
 
@@ -133,8 +149,11 @@ class TopLevelFolder:
     is_club: bool
     sub_folder_list: list[SecondLevelFolder]
 
+# TODO: "进行中" means the comic translation is not finished yet. Then we should prefer the japanese version. 
+# Only one sample is found till now, so ignore it for now.
+
 # The selection rule is:
-# 1. If the comic has chinese version, then select the chinese version.
+# 1. If the comic has chinese version, then select the chinese version
 # 2. If the comic has multiple chinese versions, then select the one with 無修正 in the name.
 # 3. If the comic has multiple chinese versions with 無修正 in the name, select the one with the most pages.
 # 4. If all chinese versions have the same number of pages, then select the first one.
@@ -204,6 +223,8 @@ def get_pages_number(top_level_folder_list: list[TopLevelFolder]):
                 page_number += comic.pages
     return page_number
 
+def remove_extension(filename):
+    return filename[:filename.rfind('.')]
 
 def save_top_level_folder_list(top_level_folder_list: list[TopLevelFolder], root_path:str, save_path: str):
     total_pages_number = get_pages_number(top_level_folder_list)
@@ -224,10 +245,27 @@ def save_top_level_folder_list(top_level_folder_list: list[TopLevelFolder], root
                         with zipfile.ZipFile(new_comic_path, "a", zipfile.ZIP_STORED) as zipf:
                             for root, dirs, files in os.walk(old_comic_path):
                                 for file in files:
-                                    zipf.write(os.path.join(root, file), arcname=os.path.join(comic.new_name, os.path.relpath(root, old_comic_path), file))
+                                    # If the file is a compressed file (only zip), then recursively unzip it.
+                                    if file.lower().split('.')[-1] == 'zip':
+                                        try:
+                                            filename = remove_extension(file)
+                                            tmp_path = os.path.join(root_path, TMP_FOLDER_NAME, os.path.relpath(root, old_comic_path), filename)
+                                            # Unpack the compressed file to a temp folder outside the root_path
+                                            shutil.unpack_archive(os.path.join(root, file), tmp_path, 'zip')
+                                            for root2, dirs2, files2 in os.walk(tmp_path):
+                                                for file2 in files2:
+                                                    zipf.write(os.path.join(root2, file2), arcname=os.path.join(comic.new_name, os.path.relpath(root, old_comic_path), os.path.relpath(root2, tmp_path), file2))
+                                            shutil.rmtree(tmp_path)
+                                        except:
+                                            print("Failed to unzip {}. Treating zip as a whole.".format(os.path.join(root, file)))
+                                            zipf.write(os.path.join(root, file), arcname=os.path.join(comic.new_name, os.path.relpath(root, old_comic_path), file))
+                                    else:
+                                        zipf.write(os.path.join(root, file), arcname=os.path.join(comic.new_name, os.path.relpath(root, old_comic_path), file))
                                     pbar.update(1)
                     else:
                         pbar.update(comic.pages)
+    if os.path.exists(os.path.join(root_path, TMP_FOLDER_NAME)):
+        shutil.rmtree(os.path.join(root_path, TMP_FOLDER_NAME))
     print("Done! All files are saved to {}".format(save_path))
     input("Press Enter to exit...")
 
@@ -245,11 +283,10 @@ def get_new_comic_name(comic: ComicFolder, author_full: str):
     for note in comic.note:
         new_comic_name+=" ["+note+"]"
     
-    new_comic_name.strip()
-    return new_comic_name
+    return new_comic_name.strip()
 
 def get_top_level_folder_list(files_list: list) -> tuple[list[TopLevelFolder], list[str]]:
-    pattern = r"\d{4}-\[(.+)\]"
+    pattern = r"^[C\d]{1}\d{3}-\[(.+)\]"
     skip_list = []
     res_list = []
     if len(files_list)==0:
@@ -262,6 +299,9 @@ def get_top_level_folder_list(files_list: list) -> tuple[list[TopLevelFolder], l
             filename_full = item
             idx = item[:4]
             author_full = item[5:]
+
+            # Special case: [治屋武しでん] part1
+            author_full = author_full.split(" part")[0]
 
             # The author_full could be: [author], [club (author)], [club (author1、author2、...)]
 
@@ -344,6 +384,13 @@ def is_event(string):
             return True
     return False
 
+def get_file_number(root_path):
+    file_number = 0
+    for root, dirs, files in os.walk(root_path):
+        for file in files:
+            file_number += 1
+    return file_number
+
 def fill_in_top_level_folder_list(top_level_folder_list):
     skip_comic_list = []
     for top_level_folder in top_level_folder_list:
@@ -354,10 +401,83 @@ def fill_in_top_level_folder_list(top_level_folder_list):
 
             second_file_path = os.path.join(root_path, top_level_folder.filename_full, second_file)
 
-            if "画集" in second_file or "动画" in second_file:
+            if "动画" in second_file or "音声" in second_file:
                 continue
 
-            if os.path.isdir(second_file_path):
+            # TODO Some time in "画集", the title is still like other comic. Like [2018.02] モグダン イラストワークス + クリアファイル裏 [無修正]
+            elif "画集" in second_file:
+                # Collect the single pictures in the folder
+                item_list = natsorted(os.listdir(second_file_path))
+                single_images_list = []
+                res_comic_list = []
+                for item in item_list:
+                    # If item is not a folder
+                    if not os.path.isdir(os.path.join(second_file_path, item)) and item.lower().split('.')[-1] in image_suf_set:
+                        single_images_list.append(comic)
+                    elif os.path.isdir(os.path.join(second_file_path, item)):
+                        # PIXIV FANBOX 作品集 (kemono 截止2023.07.09 标注发布时间&作品名称依次排序)
+                        # PIXIV 全公开投稿 作品集 (自整理 348P 截止2023.08.06 按发布时间先后排序)
+                        # ex-hentai 杂图汇总
+                        # FANTIA 作品集 (kemono 截止2023.03.24 标注发布时间&作品名称依次排序)
+                        comic_folder_path = os.path.join(second_file_path, item)
+                        if not os.path.isdir(comic_folder_path):
+                            continue
+
+                        if item[0] == "#":
+                            skip_comic_list.append(comic_folder_path)
+                            continue
+                        
+                        event = ""
+                        item_name_splited = split_comic_name(item)
+                        for item_name in item_name_splited:
+                            if item_name["type"] == "()" and "截止" in item_name["content"]:
+                                event = item_name["content"].split("截止")[-1].split(" ")[0].strip()
+                            elif item_name["type"] == "c":
+                                comicname = top_level_folder.author_name_list[0] + ' ' + item_name["content"] if top_level_folder.is_club else top_level_folder.author_full + ' ' + item_name["content"]
+
+                        comic = ComicFolder(
+                            filename=item,
+                            comicname=comicname,
+                            language="",
+                            translator="",
+                            time="",
+                            event=event,
+                            series="",
+                            note=[],
+                            pages = 0,
+                            new_name=""
+                        )
+                        comic.new_name = get_new_comic_name(comic, top_level_folder.author_full)
+
+                        comic.pages = get_file_number(comic_folder_path)
+                        res_comic_list.append(comic)
+                        
+                if single_images_list:
+                    # Create a new folder for the single images
+                    single_images_folder_path = os.path.join(second_file_path, "其他杂图")
+                    if not os.path.exists(single_images_folder_path):
+                        os.mkdir(single_images_folder_path)
+                    for single_image in single_images_list:
+                        shutil.move(os.path.join(second_file_path, single_image), single_images_folder_path)
+                    comic = ComicFolder(
+                        filename="其他杂图",
+                        comicname= top_level_folder.author_name_list[0] + ' ' + "其他杂图" if top_level_folder.is_club else top_level_folder.author_full + ' ' + "其他杂图",
+                        language="",
+                        translator="",
+                        time="",
+                        event="",
+                        series="",
+                        note=[],
+                        pages = len(single_images_list),
+                        new_name=""
+                    )
+                    comic.new_name = get_new_comic_name(comic, top_level_folder.author_full)
+                    comic.pages = get_file_number(single_images_folder_path)
+                    res_comic_list.append(comic)
+
+                top_level_folder.sub_folder_list.append(SecondLevelFolder(foldername=second_file, content_list=res_comic_list))
+
+            elif os.path.isdir(second_file_path):
 
                 comic_list=natsorted(os.listdir(second_file_path))
 
@@ -417,7 +537,6 @@ def fill_in_top_level_folder_list(top_level_folder_list):
                     else:
                         pass
 
-
                     if comic_name_splited[0]["type"] == "[]":
                         if is_date(comic_name_splited[0]["content"]):
                             comic.time = pop_first_brackets(comic_name_splited)
@@ -446,7 +565,7 @@ def fill_in_top_level_folder_list(top_level_folder_list):
                     
                     comic.comicname = get_first_c(comic_name_splited)
 
-                    comic.pages = len((os.listdir(comic_folder_path)))
+                    comic.pages = get_file_number(comic_folder_path)
 
                     comic.new_name = get_new_comic_name(comic, top_level_folder.author_full)
 
@@ -458,9 +577,11 @@ def fill_in_top_level_folder_list(top_level_folder_list):
     return skip_comic_list
 
 if __name__ == "__main__":
+    MULTI_THREAD = True
 
     root_path = input("Please input the root path: ")
     save_path = input("Please input the save path: ")
+    thread_number = 4
 
     all_top_files_list = natsorted(os.listdir(root_path))
 
@@ -470,4 +591,22 @@ if __name__ == "__main__":
   
     clean_top_level_folder_list(top_level_folder_list)
 
-    save_top_level_folder_list(top_level_folder_list, root_path, save_path)
+    if MULTI_THREAD:
+        # Divide the top_level_folder_list into several parts for each thread
+        top_level_folder_list_list = []
+        for i in range(thread_number):
+            top_level_folder_list_list.append([])
+        for i in range(len(top_level_folder_list)):
+            top_level_folder_list_list[i%thread_number].append(top_level_folder_list[i])
+        
+        # Use multi-thread to save the files
+        import threading
+        threads = []
+        for i in range(thread_number):
+            threads.append(threading.Thread(target=save_top_level_folder_list, args=(top_level_folder_list_list[i], root_path, save_path)))
+        for i in range(thread_number):
+            threads[i].start()
+        for i in range(thread_number):
+            threads[i].join()
+    else:
+        save_top_level_folder_list(top_level_folder_list, root_path, save_path)
